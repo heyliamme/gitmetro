@@ -1,0 +1,298 @@
+{
+  "name": "gitmetro",
+  "displayName": "GitMetro — Git Log, Commit Graph & Merge Diff",
+  "description": "See your repository as a metro map: commit graph, branch tree, merge diffs per parent, conflict resolution, cherry-pick, rebase and more in one Git panel.",
+  "version": "0.2.0",
+  "publisher": "heyliam",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#0d1117",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/heyliamme/gitmetro"
+  },
+  "bugs": {
+    "url": "https://github.com/heyliamme/gitmetro/issues"
+  },
+  "homepage": "https://github.com/heyliamme/gitmetro#readme",
+  "pricing": "Free",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Visualization"
+  ],
+  "keywords": [
+    "git",
+    "git log",
+    "git graph",
+    "commit graph",
+    "git history",
+    "branches",
+    "merge",
+    "merge diff",
+    "merge conflict",
+    "conflict",
+    "diff",
+    "rebase",
+    "cherry-pick",
+    "revert",
+    "stash",
+    "tag",
+    "metro map",
+    "scm",
+    "version control",
+    "multi-root"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished",
+    "onWebviewPanel:gitmetro.editor"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Runs git in the repository, which can execute repository-configured hooks and helpers."
+    },
+    "virtualWorkspaces": false
+  },
+  "contributes": {
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "gitmetro",
+          "title": "GitMetro",
+          "icon": "media/panel-icon.svg"
+        }
+      ],
+      "activitybar": [
+        {
+          "id": "gitmetro-sidebar",
+          "title": "GitMetro",
+          "icon": "media/panel-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "gitmetro": [
+        {
+          "type": "webview",
+          "id": "gitmetro.log",
+          "name": "Log",
+          "when": "!gitmetro.noRepo"
+        }
+      ],
+      "gitmetro-sidebar": [
+        {
+          "type": "webview",
+          "id": "gitmetro.branches",
+          "name": "Branches",
+          "when": "!gitmetro.noRepo"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "gitmetro.show",
+        "title": "Open Git Log",
+        "category": "GitMetro"
+      },
+      {
+        "command": "gitmetro.openEditor",
+        "title": "Open Git Log in Editor",
+        "category": "GitMetro",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "gitmetro.refresh",
+        "title": "Reload",
+        "category": "GitMetro",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "gitmetro.fileHistory",
+        "title": "Show File History in GitMetro",
+        "category": "GitMetro"
+      },
+      {
+        "command": "gitmetro.lineHistory",
+        "title": "Show History for Selection in GitMetro",
+        "category": "GitMetro"
+      },
+      {
+        "command": "gitmetro.toggleBlame",
+        "title": "Toggle Blame Annotations",
+        "category": "GitMetro"
+      },
+      {
+        "command": "gitmetro.revealCommit",
+        "title": "Show Commit in GitMetro",
+        "category": "GitMetro"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "gitmetro.openEditor",
+          "when": "view == gitmetro.log",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitmetro.refresh",
+          "when": "view == gitmetro.log",
+          "group": "navigation@2"
+        },
+        {
+          "command": "gitmetro.openEditor",
+          "when": "view == gitmetro.branches",
+          "group": "navigation@1"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "gitmetro.fileHistory",
+          "group": "7_gitmetro",
+          "when": "gitmetro.hasRepo && resourceScheme == file"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "gitmetro.fileHistory",
+          "group": "7_gitmetro",
+          "when": "gitmetro.hasRepo && resourceScheme == file"
+        },
+        {
+          "command": "gitmetro.toggleBlame",
+          "when": "gitmetro.hasRepo && resourceScheme == file",
+          "group": "7_gitmetro"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "gitmetro.fileHistory",
+          "when": "resourceScheme == file"
+        },
+        {
+          "command": "gitmetro.lineHistory",
+          "when": "editorIsOpen && resourceScheme == file"
+        },
+        {
+          "command": "gitmetro.toggleBlame",
+          "when": "editorIsOpen && resourceScheme == file"
+        },
+        {
+          "command": "gitmetro.revealCommit",
+          "when": "false"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "gitmetro.lineHistory",
+          "when": "gitmetro.hasRepo && resourceScheme == file",
+          "group": "7_gitmetro@1"
+        },
+        {
+          "command": "gitmetro.toggleBlame",
+          "when": "gitmetro.hasRepo && resourceScheme == file",
+          "group": "7_gitmetro@2"
+        }
+      ],
+      "editor/lineNumber/context": [
+        {
+          "command": "gitmetro.toggleBlame",
+          "when": "gitmetro.hasRepo && resourceScheme == file",
+          "group": "7_gitmetro"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "GitMetro",
+      "properties": {
+        "gitmetro.pageSize": {
+          "type": "number",
+          "default": 3000,
+          "minimum": 100,
+          "description": "Commits loaded per page; more load as you scroll."
+        },
+        "gitmetro.order": {
+          "type": "string",
+          "enum": [
+            "date",
+            "topo"
+          ],
+          "enumDescriptions": [
+            "Interleave branches by commit date.",
+            "Keep each branch's commits together."
+          ],
+          "default": "date",
+          "description": "Commit order in the log."
+        },
+        "gitmetro.gitPath": {
+          "type": "string",
+          "default": "git",
+          "scope": "machine",
+          "description": "Path to the git executable."
+        },
+        "gitmetro.statusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a GitMetro button in the status bar that opens the log in an editor tab."
+        },
+        "gitmetro.openLogFromSidebar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open the log in an editor tab when the GitMetro sidebar is shown."
+        },
+        "gitmetro.palette": {
+          "type": "string",
+          "enum": [
+            "metro",
+            "atom"
+          ],
+          "enumDescriptions": [
+            "Saturated metro-map colours.",
+            "Atom's One Dark colours (One Light in light themes)."
+          ],
+          "default": "metro",
+          "description": "Colours for the lines in the commit graph and the branch labels."
+        }
+      }
+    },
+    "icons": {
+      "gitmetro-mark": {
+        "description": "GitMetro",
+        "default": {
+          "fontPath": "media/gitmetro-icons.woff",
+          "fontCharacter": "\\E000"
+        }
+      }
+    },
+    "viewsWelcome": []
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "typecheck": "tsc --noEmit -p .",
+    "test": "node scripts/build.mjs && node --test test/*.test.mjs",
+    "package": "node scripts/build.mjs --prod && vsce package --no-dependencies",
+    "demo": "node scripts/demo-repo.mjs",
+    "test:e2e": "npm run package && node test/e2e/run.mjs && node test/e2e/multi-root.mjs",
+    "test:perf": "npm run package && node test/e2e/perf.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.28.2",
+    "ovsx": "^1.3.0",
+    "typescript": "^7.0.2"
+  },
+  "author": {
+    "name": "LiamLee"
+  },
+  "qna": "https://github.com/heyliamme/gitmetro/issues"
+}
