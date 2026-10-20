@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { BlameAnnotations } from './blame';
 import { RevisionContentProvider, SCHEME } from './content';
-import { Git } from './git';
 import { LogViewProvider } from './view';
 
 export function activate(ctx: vscode.ExtensionContext): void {
@@ -38,20 +37,17 @@ export function activate(ctx: vscode.ExtensionContext): void {
   item.text = '$(gitmetro-mark) GitMetro';
   item.tooltip = 'Open the GitMetro log in an editor tab';
   item.command = 'gitmetro.openEditor';
-  // Only in windows that have a repository, and only if the user wants it.
-  const sync = async () => {
-    const wanted = vscode.workspace.getConfiguration('gitmetro').get('statusBar', true);
-    const folders = vscode.workspace.workspaceFolders ?? [];
-    const found = wanted && (await Promise.all(folders.map((f) => Git.toplevel(f.uri.fsPath, provider.gitBin())))).some(Boolean);
-    if (found) item.show();
+  // Only in windows that have a repository (nested ones count: GitMetro's own count, not the
+  // workspace folders), and only if the user wants it.
+  const sync = () => {
+    if (vscode.workspace.getConfiguration('gitmetro').get('statusBar', true) && provider.repoCount > 0) item.show();
     else item.hide();
   };
-  void sync();
-  provider.onReposChanged = () => void sync();
+  sync();
+  provider.onReposChanged = sync;
   ctx.subscriptions.push(
     item,
-    vscode.workspace.onDidChangeConfiguration((e) => e.affectsConfiguration('gitmetro') && void sync()),
-    vscode.workspace.onDidChangeWorkspaceFolders(() => void sync()),
+    vscode.workspace.onDidChangeConfiguration((e) => e.affectsConfiguration('gitmetro') && sync()),
   );
 }
 

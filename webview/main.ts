@@ -1526,6 +1526,9 @@ window.addEventListener('message', (ev: MessageEvent<ToView>) => {
       repos = m.repos;
       if (m.current !== currentRepo) {
         currentRepo = m.current;
+        // A highlighted repository row follows the repository now shown, so the list never
+        // highlights one repository while the card shows another.
+        if (sideSel.startsWith('r:')) sideSel = 'r:' + currentRepo;
         (ui as UiState & { root?: string }).root = currentRepo; // lets a restored tab find its repository
         save();
         rows = [];

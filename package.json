@@ -2,7 +2,7 @@
   "name": "gitmetro",
   "displayName": "GitMetro — Git Log, Commit Graph & Merge Diff",
   "description": "See your repository as a metro map: commit graph, branch tree, merge diffs per parent, conflict resolution, cherry-pick, rebase and more in one Git panel.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "heyliam",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -281,7 +281,7 @@
     "package": "node scripts/build.mjs --prod && vsce package --no-dependencies",
     "demo": "node scripts/demo-repo.mjs",
     "preview": "npm run build && node scripts/preview-ui.mjs",
-    "test:e2e": "npm run package && node test/e2e/run.mjs && node test/e2e/multi-root.mjs",
+    "test:e2e": "npm run package && node test/e2e/run.mjs && node test/e2e/multi-root.mjs && node test/e2e/nested.mjs",
     "test:perf": "npm run package && node test/e2e/perf.mjs"
   },
   "devDependencies": {

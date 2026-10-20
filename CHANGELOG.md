@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1
+
+- The side bar now follows the log tab in front: switching tabs, or picking another
+  repository in a log tab, moves the branches and the current-branch card with it.
+- The highlighted row in Repositories always matches the repository shown.
+- A folder that holds several repositories (opened as one workspace folder) no longer loses
+  the GitMetro icon: repositories VS Code's Git finds while it scans, or that are created
+  later, now show up without a reload, and the status bar button counts them too.
+
 ## 0.2.0
 
 First public release.

@@ -336,6 +336,10 @@ test('several repositories: one session each, a log tab per repository', async (
   await provider.onMessage({ type: 'commitAction', action: 'newTag', hashes: [g2('rev-parse', 'HEAD')] }, tab2.webview).catch(() => {});
   eq(g('rev-parse', 'HEAD'), before);
   await send({ type: 'setRepo', root: repo });
+  // Picking a repository in a log tab moves the side bar along with it.
+  await provider.onMessage({ type: 'setRepo', root: second }, tab1.webview);
+  eq(last('repos').current, second);
+  await send({ type: 'setRepo', root: repo });
   vscode.workspace.workspaceFolders = saved;
   tab1.dispose();
   tab2.dispose();
@@ -587,6 +591,26 @@ test('a deleted repository folder is not reported as git missing', async () => {
   const { Git } = require('../dist/core/git.js');
   const gone = path.join(tmp, 'deleted-repo');
   await assert.rejects(new Git(gone).run(['status']), /no longer exists: not a git repository/);
+});
+
+test('repositories that VS Code Git finds after startup are picked up', async () => {
+  const late = path.join(tmp, 'late');
+  execFileSync('git', ['init', '-q', '-b', 'main', late]);
+  execFileSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@e.x', 'commit', '-q', '--allow-empty', '-m', 'late commit'], { cwd: late });
+  const opened = [];
+  const api = { repositories: [], onDidOpenRepository: (f) => (opened.push(f), { dispose() {} }), onDidCloseRepository: (f) => (opened.push(f), { dispose() {} }), onDidChangeState: () => ({ dispose() {} }) };
+  vscode.extensions.getExtension = (id) => (id === 'vscode.git' ? { isActive: true, exports: { getAPI: () => api } } : undefined);
+  await send({ type: 'ready' });
+  ok(!last('repos').repos.some((r) => r.root === late), 'not known yet');
+  // Git finishes scanning and reports a nested repository: no reload needed.
+  api.repositories = [{ rootUri: vscode.Uri.file(late) }];
+  opened.forEach((f) => f());
+  await new Promise((r) => setTimeout(r, 900));
+  ok(last('repos').repos.some((r) => r.root === late), 'picked up');
+  api.repositories = [];
+  opened.forEach((f) => f());
+  await new Promise((r) => setTimeout(r, 900));
+  ok(!last('repos').repos.some((r) => r.root === late), 'dropped when Git closes it');
 });
 
 test('no errors were shown', () => {

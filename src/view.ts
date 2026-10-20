@@ -30,6 +30,8 @@ interface View {
   reply: (msg: ToView) => void;
   /** Bumped by every bind, so a slow bind can't overwrite a later one. */
   bindGen: number;
+  /** Told there is no repository yet: bound as soon as discovery finds one. */
+  waiting?: boolean;
 }
 
 /**
@@ -38,6 +40,15 @@ interface View {
  * a log tab stays on the repository it was opened for, so several repositories can be open
  * side by side.
  */
+/** The part of VS Code's Git extension API GitMetro uses. */
+interface BuiltinGit {
+  readonly state: 'uninitialized' | 'initialized';
+  readonly repositories: readonly { readonly rootUri: vscode.Uri }[];
+  readonly onDidOpenRepository: vscode.Event<unknown>;
+  readonly onDidCloseRepository: vscode.Event<unknown>;
+  readonly onDidChangeState: vscode.Event<unknown>;
+}
+
 export class LogViewProvider implements vscode.WebviewViewProvider, vscode.Disposable, SessionHost {
   private readonly views = new Map<vscode.Webview, View>();
   private readonly sessions = new Map<string, RepoSession>();
@@ -45,10 +56,19 @@ export class LogViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
   private repos: string[] = [];
   private active?: string;
   private discovering?: Promise<void>;
+  private discoverAgain = false;
+  /** VS Code's Git hasn't finished its first scan: "no repository" isn't known yet. */
+  private scanning = false;
+  private discoverTimer?: NodeJS.Timeout;
+  private gitApi?: BuiltinGit;
   private summaryTimer?: NodeJS.Timeout;
   private readonly disposables: vscode.Disposable[] = [];
   /** Called after each discovery with the number of repositories (the status bar listens). */
   onReposChanged?: (count: number) => void;
+
+  get repoCount(): number {
+    return this.repos.length;
+  }
   private gitMissingShown = false;
   /** View → Output → GitMetro: what refreshed and why, and every git command that failed. */
   readonly log = vscode.window.createOutputChannel('GitMetro', { log: true });
@@ -103,6 +123,7 @@ export class LogViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
 
   dispose(): void {
     if (this.summaryTimer) clearTimeout(this.summaryTimer);
+    if (this.discoverTimer) clearTimeout(this.discoverTimer);
     this.sessions.forEach((s) => s.dispose());
     this.disposables.forEach((d) => d.dispose());
   }
@@ -164,20 +185,54 @@ export class LogViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
 
   /** Finds the workspace's repositories; keeps one session per repository. */
   discover(): Promise<void> {
-    this.discovering ??= this.doDiscover().finally(() => (this.discovering = undefined));
+    // Asked again while looking (VS Code's Git found another repository meanwhile): look once more
+    // after this pass, or the newcomer would be missed.
+    if (this.discovering) {
+      this.discoverAgain = true;
+      return this.discovering;
+    }
+    this.discovering = (async () => {
+      do {
+        this.discoverAgain = false;
+        await this.doDiscover();
+      } while (this.discoverAgain);
+    })().finally(() => (this.discovering = undefined));
     return this.discovering;
+  }
+
+  /** Batches the bursts VS Code's Git sends while it scans (one event per repository). */
+  private scheduleDiscover(): void {
+    if (this.discoverTimer) clearTimeout(this.discoverTimer);
+    this.discoverTimer = setTimeout(() => void this.discover(), 300);
+  }
+
+  /**
+   * VS Code's Git extension, started if it hasn't yet; undefined when it is disabled. It finds
+   * repositories over time (scanning subfolders, a repository created later), so GitMetro
+   * follows its events rather than asking once at startup, when it may not have looked yet.
+   */
+  private async builtinGit(): Promise<BuiltinGit | undefined> {
+    if (this.gitApi) return this.gitApi;
+    try {
+      const ext = vscode.extensions.getExtension<{ getAPI(version: 1): BuiltinGit }>('vscode.git');
+      if (!ext) return undefined;
+      const api = (ext.isActive ? ext.exports : await ext.activate()).getAPI(1);
+      this.gitApi = api;
+      const again = () => this.scheduleDiscover();
+      this.disposables.push(api.onDidOpenRepository(again), api.onDidCloseRepository(again), api.onDidChangeState(again));
+      return api;
+    } catch (e) {
+      // Disabled (git.enabled: false) or failed to start: the workspace folders are enough.
+      this.log.debug(`vscode.git unavailable: ${e instanceof Error ? e.message : e}`);
+      return undefined;
+    }
   }
 
   private async doDiscover(): Promise<void> {
     const found = new Set<string>();
-    // The built-in Git extension knows about nested repositories, but it may be disabled or not
-    // activated yet (both make its API throw): then the workspace folders are enough.
-    try {
-      const gitApi = vscode.extensions.getExtension('vscode.git')?.exports?.getAPI?.(1);
-      for (const r of gitApi?.repositories ?? []) found.add(norm(r.rootUri.fsPath));
-    } catch (e) {
-      this.log.debug(`vscode.git unavailable: ${e instanceof Error ? e.message : e}`);
-    }
+    // VS Code's Git knows about nested repositories (a folder holding several projects).
+    const builtin = await this.builtinGit();
+    for (const r of builtin?.repositories ?? []) found.add(norm(r.rootUri.fsPath));
     for (const f of vscode.workspace.workspaceFolders ?? []) {
       const top = await Git.toplevel(f.uri.fsPath, this.gitBin());
       if (top) found.add(norm(top));
@@ -192,8 +247,12 @@ export class LogViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
     // Views and menus only show where there is a repository to show.
     void vscode.commands.executeCommand('setContext', 'gitmetro.hasRepo', this.repos.length > 0);
     // The views use the inverse: before activation they must count as shown, or VS Code
-    // won't restore the side bar on reload.
-    void vscode.commands.executeCommand('setContext', 'gitmetro.noRepo', this.repos.length === 0);
+    // won't restore the side bar on reload. And only "no repository" once VS Code's Git has
+    // finished scanning, or the icon would vanish for a moment and close the side bar.
+    const settled = !builtin || builtin.state === 'initialized';
+    this.scanning = !settled;
+    this.log.debug(`repositories: ${this.repos.length}${settled ? '' : ' (VS Code Git still scanning)'}`);
+    if (this.repos.length || settled) void vscode.commands.executeCommand('setContext', 'gitmetro.noRepo', this.repos.length === 0);
     this.onReposChanged?.(this.repos.length);
     // Sessions (a watcher and a few git commands each) only once GitMetro is on screen: at
     // startup the status bar just needs to know there is a repository.
@@ -202,6 +261,9 @@ export class LogViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
     if (!this.active || !this.repos.includes(this.active)) this.active = (saved && this.repos.includes(saved) ? saved : undefined) ?? this.repoOfActiveEditor() ?? this.repos[0];
     // Views that showed a repository no longer in the workspace move to the active one.
     for (const v of this.views.values()) if (v.session && dropped.includes(v.session.root)) void this.bind(v, this.active);
+    // Views opened before any repository was found (VS Code's Git still scanning) take one now;
+    // views still empty once the scan is over say so.
+    if (this.repos.length || settled) for (const v of this.views.values()) if (v.waiting) void this.bind(v, v.fixedRoot ?? this.active);
     this.summaryChanged();
   }
 
@@ -235,12 +297,14 @@ export class LogViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
     if (gen !== v.bindGen) return;
     if (!root) {
       v.session = undefined;
-      v.webview.postMessage({ type: 'empty', message: 'No Git repository in this workspace.' } satisfies ToView);
+      v.waiting = true;
+      v.webview.postMessage({ type: 'empty', message: this.scanning ? 'Looking for Git repositories…' : 'No Git repository in this workspace.' } satisfies ToView);
       return;
     }
     const session = await this.session(root);
     if (gen !== v.bindGen) return; // a later bind (setRepo) won
     v.session = session;
+    v.waiting = false;
     if (v.pendingFilter) {
       v.session.filter = v.pendingFilter;
       v.pendingFilter = undefined;
@@ -298,6 +362,7 @@ export class LogViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
     panel.iconPath = vscode.Uri.joinPath(this.ctx.extensionUri, 'media', 'icon.png');
     this.editors.set(target, panel);
     panel.onDidDispose(() => this.forgetEditor(panel));
+    this.followWhenActive(panel);
     return this.attach(panel.webview, () => panel.visible, panel.onDidChangeViewState, panel.onDidDispose, besideSidebar ? 'log' : 'full', target);
   }
 
@@ -310,6 +375,25 @@ export class LogViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
     if (!inside) return false;
     const top = await Git.toplevel(root, this.gitBin());
     return !!top && norm(top) === root;
+  }
+
+  /** The side bar and panel show the repository of the log tab in front, like VS Code's views follow the editor. */
+  private async follow(root: string): Promise<void> {
+    if (!this.repos.includes(root)) return;
+    if (this.active !== root) {
+      this.active = root;
+      await this.ctx.workspaceState.update(REPO_KEY, root);
+    }
+    for (const v of this.views.values()) if (!v.fixedRoot && v.session?.root !== root) await this.bind(v, root);
+  }
+
+  private followWhenActive(panel: vscode.WebviewPanel): void {
+    panel.onDidChangeViewState((e) => {
+      if (!e.webviewPanel.active) return;
+      // Look the root up by identity: the tab may have switched repository since it opened.
+      const root = [...this.editors].find(([, p]) => p === panel)?.[0];
+      if (root) void this.follow(root);
+    });
   }
 
   /** A tab can change repository, so find it by identity rather than by the root it opened on. */
@@ -405,6 +489,7 @@ export class LogViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
             panel.title = this.repos.length > 1 ? `GitMetro: ${path.basename(root)}` : 'GitMetro';
           } else if (panel) {
             this.editors.get(root)!.reveal();
+            await this.follow(root);
             return;
           }
         } else {
@@ -412,6 +497,7 @@ export class LogViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
           await this.ctx.workspaceState.update(REPO_KEY, root);
         }
         await this.bind(v, root);
+        if (v.fixedRoot) await this.follow(root);
         if (m.openLog) await this.openLogFor(root);
         return;
       }
@@ -541,6 +627,7 @@ export class LogViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
     panel.iconPath = vscode.Uri.joinPath(this.ctx.extensionUri, 'media', 'icon.png');
     this.editors.set(target, panel);
     panel.onDidDispose(() => this.forgetEditor(panel));
+    this.followWhenActive(panel);
     this.attach(panel.webview, () => panel.visible, panel.onDidChangeViewState, panel.onDidDispose, 'log', target);
   }
 }

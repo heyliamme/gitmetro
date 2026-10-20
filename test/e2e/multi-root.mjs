@@ -117,11 +117,26 @@ try {
     ok((await subjects(appLog)).length > 20, 'app log too short');
   });
 
-  await check('the side bar shows the chosen repository with its branches', async () => {
-    const card = await vs.eval(`document.querySelector('.cur-repo')?.textContent`, side);
-    ok(card === 'docs', `card repo: ${card}`);
-    const refs = await vs.eval(`[...document.querySelectorAll('#refTree .node.ref')].map((n) => n.getAttribute('title'))`, side);
+  const cardRepo = () => vs.eval(`document.querySelector('.cur-repo')?.textContent`, side);
+  const sideRefs = () => vs.eval(`[...document.querySelectorAll('#refTree .node.ref')].map((n) => n.getAttribute('title'))`, side);
+
+  await check('the side bar follows the log tab in front', async () => {
+    await vs.showTab('GitMetro: app');
+    await waitFor(async () => (await cardRepo()) === 'app', { what: 'side bar on app' });
+    ok((await sideRefs()).includes('feature/offline-sync'), 'app branches listed');
+    await vs.showTab('GitMetro: docs');
+    await waitFor(async () => (await cardRepo()) === 'docs', { what: 'side bar on docs' });
+    const refs = await sideRefs();
     ok(refs.includes('main') && !refs.includes('feature/offline-sync'), `refs: ${refs}`);
+  });
+
+  await check('picking a repository in a log tab moves the side bar too', async () => {
+    await vs.showTab('GitMetro: app');
+    await waitFor(async () => (await cardRepo()) === 'app', { what: 'side bar on app' });
+    const appLog = await logOf('Tests for the offline queue');
+    const docsRoot = await vs.eval(`[...document.getElementById('repoSelect').options].find((o) => o.textContent === 'docs').value`, appLog);
+    await vs.eval(`(() => { const s = document.getElementById('repoSelect'); s.value = ${JSON.stringify(docsRoot)}; s.dispatchEvent(new Event('change')); })()`, appLog);
+    await waitFor(async () => (await cardRepo()) === 'docs', { what: 'side bar moved to docs' });
   });
 
   await check('a commit made in one repository refreshes its log, and only its log', async () => {
@@ -134,8 +149,10 @@ try {
     ok(after === before, `app log changed: ${before} -> ${after}`);
   });
 
-  await vs.screenshot(path.join(root, 'multi-root.png'));
-  console.log(`  screenshot: ${path.join(root, 'multi-root.png')}`);
+  // GITMETRO_E2E_OUT keeps the screenshot after a passing run (the profile is removed).
+  const shot = path.join(process.env.GITMETRO_E2E_OUT ?? root, 'multi-root.png');
+  await vs.screenshot(shot);
+  console.log(`  screenshot: ${shot}`);
 } finally {
   await vs.close();
 }
