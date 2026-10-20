@@ -9,7 +9,15 @@ writeFileSync(path.join(isolated, 'config'), '[user]\n\tname = GitMetro Tests\n\
 process.env.GIT_CONFIG_GLOBAL = path.join(isolated, 'config');
 process.env.GIT_CONFIG_NOSYSTEM = '1';
 const made = [isolated];
-process.on('exit', () => made.forEach((d) => rmSync(d, { recursive: true, force: true })));
+process.on('exit', () =>
+  made.forEach((d) => {
+    try {
+      rmSync(d, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    } catch {
+      /* Windows may still hold it; it's in the temp dir */
+    }
+  }),
+);
 
 /** GITMETRO_TEST_REPO if set, otherwise a freshly generated demo repository (removed afterwards). */
 export function testRepo() {

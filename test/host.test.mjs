@@ -48,7 +48,14 @@ const vlog = globalThis.__vscodeLog;
 const eq = (a, b) => assert.deepEqual(a, b);
 const ok = (v, what) => assert.ok(v, what);
 
-test.after(() => rmSync(tmp, { recursive: true, force: true }));
+// Windows can hold the folder a moment longer (git, the file watcher stub): retry, and never fail the run on cleanup.
+test.after(() => {
+  try {
+    rmSync(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  } catch {
+    /* left in the temp dir */
+  }
+});
 
 test('webview html carries a CSP and the bundle', () => {
   assert.match(webview.html, /Content-Security-Policy/);
@@ -460,12 +467,15 @@ test('worktrees: create from a commit, listed in the state, removed', async () =
   answer(target, 'e2e/wt-docs', undefined); // folder, branch name, then dismiss "open it?"
   await send({ type: 'commitAction', action: 'newWorktree', hashes: [at] });
   const wts = last('state').state.worktrees;
-  const w = wts.find((x) => x.path === target);
+  // git prints forward slashes on Windows: compare resolved paths.
+  const same = (a, b) => path.resolve(a) === path.resolve(b);
+  const w = wts.find((x) => same(x.path, target));
   ok(w, `worktree listed: ${JSON.stringify(wts)}`);
   eq([w.branch, w.head], ['e2e/wt-docs', at]);
   answer('Remove');
-  await send({ type: 'worktree', action: 'remove', path: target });
-  ok(!last('state').state.worktrees.some((x) => x.path === target), 'removed');
+  // The view sends back the path exactly as git listed it.
+  await send({ type: 'worktree', action: 'remove', path: w.path });
+  ok(!last('state').state.worktrees.some((x) => same(x.path, target)), 'removed');
   // Paths git didn't list are ignored.
   await send({ type: 'worktree', action: 'remove', path: '/' });
   g('branch', '-D', 'e2e/wt-docs');
