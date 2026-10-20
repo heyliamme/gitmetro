@@ -70,18 +70,17 @@ other VS Code windows first.
 ## The icon
 
 `media/panel-icon.svg` is the mark: a metro line with a branch that leaves it and rejoins it. The store icon
-(`assets/icon.svg`, rendered to `media/icon.png`) and the status bar font
+(`media/icon.svg`, rendered to `media/icon.png`) and the status bar font
 (`media/gitmetro-icons.woff`, built by `scripts/build-icon-font.py`) are drawn from it.
 
 ## Working on the UI in a browser
 
-The harness runs the real extension host code and serves the real webview, so you can
+`scripts/preview-ui.mjs` runs the real extension host code and serves the real webview, so you can
 iterate on the UI with browser devtools:
 
 ```bash
-npm run build
 npm run demo -- /tmp/demo              # or /tmp/demo --conflict
-node harness/server.mjs /tmp/demo
+npm run preview -- /tmp/demo           # builds, then serves the UI
 # http://localhost:7799/?theme=light&select=merge&text=sync
 # headless screenshot: google-chrome --headless=new --virtual-time-budget=8000 --screenshot=out.png <url>
 ```
@@ -99,6 +98,10 @@ node harness/server.mjs /tmp/demo
 | `src/content.ts` | Serves files at a revision for diffs |
 | `src/protocol.ts` | Message types shared with the webview |
 | `webview/` | The UI: plain TypeScript and CSS, no framework |
+| `media/` | Icons: the mark, the store icon and its SVG source, the status bar font |
+| `scripts/` | Build, demo repository, UI preview, icon font |
+| `test/` | Unit tests against a demo repository; `test/e2e/` drives a real VS Code |
+| `images/` | Screenshots for the README |
 
 ## Pull requests
 

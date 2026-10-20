@@ -2,7 +2,9 @@
 !dist/extension.js
 !dist/webview.js
 !dist/webview.css
-!media/**
+!media/icon.png
+!media/panel-icon.svg
+!media/gitmetro-icons.woff
 !package.json
 !README.md
 !CHANGELOG.md

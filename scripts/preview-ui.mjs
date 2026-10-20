@@ -1,7 +1,7 @@
 // Runs the real extension host code (against a mocked VS Code API) and serves the real
 // webview in a browser, bridged over HTTP. For screenshots and UI work without VS Code.
 //
-//   node harness/server.mjs <repo> [port]
+//   npm run preview -- <repo> [port]
 //   open http://localhost:7799/?theme=light&select=merge&text=sync
 import http from 'http';
 import path from 'path';
