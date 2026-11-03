@@ -2,7 +2,7 @@
   "name": "gitmetro",
   "displayName": "GitMetro — Git Log, Commit Graph & Merge Diff",
   "description": "See your repository as a metro map: commit graph, branch tree, merge diffs per parent, conflict resolution, cherry-pick, rebase and more in one Git panel.",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "publisher": "heyliam",
   "license": "MIT",
   "icon": "media/icon.png",

@@ -69,8 +69,34 @@ try {
     writeFileSync(path.join(dir, 'README.md'), 'delta\n');
     execFileSync('git', ['add', '-A'], { cwd: dir });
     execFileSync('git', ['commit', '-qm', 'Start delta'], { cwd: dir });
+    // VS Code's Git only scans subfolders when the workspace opens; it notices a repository made
+    // later once one of its files is opened. GitMetro follows the same list, so open one.
+    // F1 reaches the workbench even with a webview focused (Ctrl+P would land in the webview).
+    // Driving quick open is timing-sensitive, so try a few times.
+    const openFile = async () => {
+      await vs.key('F1');
+      await waitFor(async () => (await vs.quickInputVisible()) && (await vs.quickInputValue()).startsWith('>'), { what: 'command palette' });
+      await vs.type('Go to File');
+      await new Promise((r) => setTimeout(r, 800));
+      await vs.key('Enter');
+      await waitFor(async () => (await vs.quickInputVisible()) && !(await vs.quickInputValue()).startsWith('>'), { timeout: 5000, what: 'quick open' });
+      await vs.type('delta/README.md');
+      await new Promise((r) => setTimeout(r, 1200));
+      await vs.key('Enter');
+      await waitFor(async () => (await vs.editorTabs()).some((t) => t.includes('README.md')), { timeout: 5000, what: 'delta/README.md open' });
+    };
+    for (let i = 0; ; i++) {
+      try {
+        await openFile();
+        break;
+      } catch (e) {
+        if (i === 2) throw e;
+        await vs.key('Escape');
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    }
     const side = await vs.webview('sidebar');
-    await waitFor(async () => (await vs.eval(`[...document.querySelectorAll('#refTree .node.repo .name')].map((n) => n.textContent)`, side)).includes('delta'), { timeout: 30000, what: 'delta listed' });
+    await waitFor(async () => (await vs.eval(`[...document.querySelectorAll('#refTree .node.repo .name')].map((n) => n.textContent)`, side)).includes('delta'), { timeout: 30000, what: 'delta listed (after VS Code Git opened it)' });
   });
   const shot = path.join(process.env.GITMETRO_E2E_OUT ?? root, 'nested.png');
   await vs.screenshot(shot);

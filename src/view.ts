@@ -505,7 +505,7 @@ export class LogViewProvider implements vscode.WebviewViewProvider, vscode.Dispo
         const root = v.session?.root ?? this.active;
         // Revealing a branch's tip from the side bar keeps the keyboard there, so arrow keys go on
         // walking the branch list.
-        if (root) await this.openLogFor(root, m.filter, m.reveal, !!m.reveal && !m.filter);
+        if (root) await this.openLogFor(root, m.filter, m.reveal, !!m.reveal);
         return;
       }
     }

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.2
+
+- Branches are grouped in one Branches section, with **Local** and **Remote**
+  folders side by side (Remote holds each remote, such as origin).
+- Clicking a branch shows only that branch's history, with its tip selected. A local branch
+  behind its upstream no longer shows the commits it hasn't pulled. Clear the Branch chip to
+  see every branch again; arrow keys still just move through the list.
+
 ## 0.2.1
 
 - The side bar now follows the log tab in front: switching tabs, or picking another

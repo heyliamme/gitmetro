@@ -295,20 +295,21 @@ function buildSidebar(): SNode[] {
   const pinned = refs.filter(isPinned);
   if (pinned.length)
     out.push({ id: 's:pinned', label: 'Pinned', kind: 'section', count: pinned.length, children: pinned.map((r) => ({ id: 'p:' + r.full, label: r.name, kind: 'ref', ref: r, children: [] })) });
+  // One Branches section holding Local and Remote side by side, as folders.
   const local = refs.filter((r) => r.kind === 'local');
-  if (local.length) out.push({ id: 's:local', label: 'Branches', kind: 'section', count: local.length, children: folderTree('f:local', local, (r) => r.name) });
   const remote = refs.filter((r) => r.kind === 'remote');
-  if (remote.length) {
-    const byRemote = new Map<string, Ref[]>();
-    for (const r of remote) {
-      const name = r.name.split('/')[0];
-      byRemote.set(name, [...(byRemote.get(name) ?? []), r]);
-    }
-    out.push({
-      id: 's:remote',
-      label: 'Remotes',
-      kind: 'section',
-      count: remote.length,
+  const byRemote = new Map<string, Ref[]>();
+  for (const r of remote) {
+    const name = r.name.split('/')[0];
+    byRemote.set(name, [...(byRemote.get(name) ?? []), r]);
+  }
+  const branches: SNode[] = [];
+  if (local.length) branches.push({ id: 'f:local', label: 'Local', kind: 'folder', children: folderTree('f:local', local, (r) => r.name) });
+  if (remote.length)
+    branches.push({
+      id: 'f:remote',
+      label: 'Remote',
+      kind: 'folder',
       children: [...byRemote.entries()].map(([name, rs]) => ({
         id: `f:remote/${name}`,
         label: name,
@@ -316,7 +317,7 @@ function buildSidebar(): SNode[] {
         children: folderTree(`f:remote/${name}`, rs, (r) => r.name.slice(name.length + 1)),
       })),
     });
-  }
+  if (branches.length) out.push({ id: 's:branches', label: 'Branches', kind: 'section', count: local.length + remote.length, children: branches });
   const wts = (state.worktrees ?? []).filter((w) => !q || w.path.toLowerCase().includes(q) || w.branch.toLowerCase().includes(q));
   if ((state.worktrees?.length ?? 0) > 1 && wts.length)
     out.push({ id: 's:worktrees', label: 'Worktrees', kind: 'section', count: state.worktrees.length, children: wts.map((w) => ({ id: 'w:' + w.path, label: w.path.split(/[\\/]/).pop() || w.path, kind: 'worktree' as const, worktree: w, children: [] })) });
@@ -375,6 +376,18 @@ $('current').addEventListener('click', (e) => {
 function showCommit(hash: string): void {
   if (SIDEBAR) post({ type: 'openLog', reveal: hash });
   else revealCommit(hash);
+}
+
+/**
+ * Clicking a branch: the log shows only that branch's history (so a local
+ * branch behind its upstream doesn't show the commits it hasn't pulled), with its tip selected.
+ */
+function showBranch(r: Ref): void {
+  if (SIDEBAR) post({ type: 'openLog', filter: { ...filter, branches: [r.full] }, reveal: r.hash });
+  else {
+    applyFilter({ ...filter, branches: [r.full] });
+    revealCommit(r.hash);
+  }
 }
 
 /** Restrict the log to one ref, wherever the log is. */
@@ -449,12 +462,14 @@ function sideNode(id: string | undefined) {
   return sideFlat.find((x) => x.node.id === id);
 }
 
-function selectSide(id: string, reveal = true): void {
+/** Arrow keys only reveal the tip (no reload per key press); a click or Enter filters too. */
+function selectSide(id: string, reveal = true, only = false): void {
   sideSel = id;
   renderSidebar();
   refTree.querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
   const r = sideNode(id)?.node.ref;
-  if (reveal && r) showCommit(r.hash);
+  if (r && only) showBranch(r);
+  else if (reveal && r) showCommit(r.hash);
 }
 
 refSearch.addEventListener('input', renderSidebar);
@@ -490,7 +505,7 @@ refTree.addEventListener('click', (e) => {
     toggleNode(f.node.id);
     return;
   }
-  selectSide(f.node.id);
+  selectSide(f.node.id, true, true);
 });
 
 refTree.addEventListener('dblclick', (e) => {
@@ -558,7 +573,7 @@ refTree.addEventListener('keydown', (e) => {
           }
       break;
     case 'Enter':
-      if (f?.node.ref) showOnly(f.node.ref.full);
+      if (f?.node.ref) showBranch(f.node.ref);
       break;
     case 'Delete':
       if (f?.node.ref && !f.node.ref.current) post({ type: 'refAction', action: 'delete', ref: f.node.ref.full });
@@ -731,7 +746,7 @@ function branchPicker(anchorEl: HTMLElement): void {
   const refs = state?.refs ?? [];
   const pinned = refs.filter((r) => isPinned(r) || r.current);
   if (pinned.length) items.push({ id: '', label: 'Pinned', head: true }, ...pinned.map((r) => ({ id: r.full, label: r.name, checked: sel.has(r.full) })));
-  for (const [kind, title] of [['local', 'Branches'], ['remote', 'Remotes'], ['tag', 'Tags']] as const) {
+  for (const [kind, title] of [['local', 'Local'], ['remote', 'Remote'], ['tag', 'Tags']] as const) {
     const rs = refs.filter((r) => r.kind === kind && !pinned.includes(r));
     if (rs.length) items.push({ id: '', label: title, head: true }, ...rs.map((r) => ({ id: r.full, label: r.name, checked: sel.has(r.full) })));
   }

@@ -266,10 +266,24 @@ try {
     await gm(log, `clearChip('user')`);
   });
 
-  await check('clicking a branch in the side bar selects its tip in the log', async () => {
+  await check('clicking a branch in the side bar shows only that branch, its tip selected', async () => {
     await waitFor(async () => (await gm(log, 'total()')) > 40, { what: 'unfiltered log' });
     await gm(side, `refClick('feature/search')`);
     await waitFor(async () => (await gm(log, 'selected()'))[0] === subjectOf('feature/search'), { what: 'tip selected' });
+    await waitFor(async () => (await gm(log, 'total()')) === count('feature/search'), { what: 'branch-only log' });
+    await gm(log, `clearChip('branch')`);
+    await waitFor(async () => (await gm(log, 'total()')) > 40, { what: 'filter cleared' });
+  });
+
+  await check('a local branch behind its upstream does not show the commits it has not pulled', async () => {
+    const unpulled = git('log', '--format=%s', 'main..origin/main').split('\n').filter(Boolean);
+    ok(unpulled.length > 0, 'demo: main should be behind origin/main');
+    await gm(side, `refClick('main')`);
+    await waitFor(async () => (await gm(log, 'total()')) === count('main'), { what: 'main-only log' });
+    const shown = await gm(log, 'subjects()');
+    ok(!unpulled.some((u) => shown.includes(u)), `unpulled commits shown: ${unpulled.filter((u) => shown.includes(u))}`);
+    await gm(log, `clearChip('branch')`);
+    await waitFor(async () => (await gm(log, 'total()')) > 40, { what: 'filter cleared' });
   });
 
   await check('double-clicking a branch shows only that branch', async () => {
